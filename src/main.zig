@@ -11,10 +11,7 @@ pub fn main() !void {
     try routeHandler.addRoute(.{ .handler = HomeController.home, .method = http.Method.GET, .path = "/" });
 
     const serverConfig = Server.ServerConfig{ .hostname = "127.0.0.1", .port = 8080, .routeHandler = routeHandler };
-
-    var server = Server.Server{
-        .config = serverConfig,
-    };
+    var server = Server.Server{ .config = serverConfig };
 
     try server.startServer();
 }
