@@ -1,5 +1,6 @@
 const std = @import("std");
 const expect = std.testing.expect;
+const Math = @import("./Math.zig");
 
 pub fn trim(string: []const u8, value_to_strip: []const u8) []const u8 {
     return std.mem.trim(u8, string, value_to_strip);
@@ -26,6 +27,27 @@ pub fn getLength(string: []const u8) usize {
 
 pub fn equal(left: []const u8, right: []const u8) bool {
     return std.mem.eql(u8, left, right);
+}
+
+pub fn compare(left: []const u8, right: []const u8) i8 {
+    const minLength = Math.min(left.len, right.len);
+    for (0..minLength) |i| {
+        if (left[i] == right[i]) {
+            continue;
+        } else if (left[i] < right[i]) {
+            return -1;
+        } else {
+            return 1;
+        }
+    }
+
+    if (left.len > minLength) {
+        return -1;
+    } else if (left.len == right.len) {
+        return 0;
+    } else {
+        return 1;
+    }
 }
 
 pub fn charAt(string: []const u8, index: u8) ?u8 {
