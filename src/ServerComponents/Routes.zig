@@ -1,7 +1,7 @@
 const std = @import("std");
 const http = std.http;
 const Server = http.Server;
-const StringUtils = @import("../Utils/StringUtils.zig").StringUtils;
+const StringUtils = @import("../Utils/StringUtils.zig");
 
 pub const PathHandlerError = error{
     PathNotFound,
