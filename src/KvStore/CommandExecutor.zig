@@ -20,7 +20,7 @@ pub const CommandExecutor = struct {
 
         if (CommandExecutor.store.?.get(command.args[0])) |value| {
             var output: [1024]u8 = undefined;
-            try request.respond(try std.fmt.bufPrintZ(&output, "{s}", .{value}), .{});
+            try request.respond(try std.fmt.bufPrint(&output, "{s}", .{value}), .{});
             return;
         } else |err| switch (err) {
             DbStoreError.KEY_NOT_FOUND => {
