@@ -35,9 +35,9 @@ pub fn compare(left: []const u8, right: []const u8) i8 {
         if (left[i] == right[i]) {
             continue;
         } else if (left[i] < right[i]) {
-            return -1;
-        } else {
             return 1;
+        } else {
+            return -1;
         }
     }
 

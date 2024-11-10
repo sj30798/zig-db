@@ -51,4 +51,18 @@ pub const CommandExecutor = struct {
         };
         try request.respond("", .{});
     }
+
+    pub fn visualize(request: *Server.Request, command: Command) anyerror!void {
+        if (CommandExecutor.store == null) {
+            CommandExecutor.store = try DbStore.init();
+        }
+
+        if (command.args.len != 0) {
+            try request.respond("", .{ .status = http.Status.bad_request, .reason = "VISUALIZE expects no arguments!" });
+            return;
+        }
+
+        CommandExecutor.store.?.visualize();
+        try request.respond("", .{});
+    }
 };

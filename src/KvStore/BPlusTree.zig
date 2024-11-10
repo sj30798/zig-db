@@ -6,7 +6,7 @@ pub const Element = struct {
     value: []const u8,
 
     pub fn getKey(self: Element) []const u8 {
-        return self.value;
+        return self.key;
     }
 
     pub fn getValue(self: Element) []const u8 {
@@ -47,7 +47,7 @@ pub const Node = struct {
         };
     }
 
-    pub fn duplicateElements(self: *Node, other: Node, startIndexInclusive: usize, endIndexExclusive: usize) !void {
+    fn duplicateElements(self: *Node, other: Node, startIndexInclusive: usize, endIndexExclusive: usize) !void {
         if (self.isLeaf != other.isLeaf) {
             return BPlusTreeError.INVALID_ARGS;
         }
@@ -67,7 +67,7 @@ pub const Node = struct {
     }
 
     pub fn getElementAtIndex(self: Node, index: usize) ![]const u8 {
-        if (self.getSize() > index) {
+        if (self.getSize() <= index) {
             return BPlusTreeError.INVALID_ARGS;
         }
 
@@ -90,13 +90,7 @@ pub const Node = struct {
     }
 
     pub fn getSplitKeyIndex(self: Node) usize {
-        var len: usize = 0;
-        if (self.isLeaf) {
-            len = self.elements.items.len;
-        } else {
-            len = self.keys.items.len;
-        }
-
+        const len: usize = self.getSize();
         return len / 2;
     }
 
@@ -107,7 +101,7 @@ pub const Node = struct {
         if (index > MAX_LEAF_NODE_SIZE) {
             return BPlusTreeError.INVALID_ARGS;
         }
-        if (self.elements.items.len == MAX_LEAF_NODE_SIZE) {
+        if (self.keys.items.len == MAX_LEAF_NODE_SIZE) {
             return BPlusTreeError.NODE_FULL;
         }
 
@@ -118,12 +112,12 @@ pub const Node = struct {
         var rChild = try Node.init(childToSplit.isLeaf);
 
         try lChild.duplicateElements(childToSplit, 0, splitKeyIndex);
-        try rChild.duplicateElements(childToSplit, splitKeyIndex + 1, childToSplit.getSize());
+        try rChild.duplicateElements(childToSplit, splitKeyIndex, childToSplit.getSize());
 
-        try self.keys.insert(splitKeyIndex, splitKey);
-        try self.children.insert(splitKeyIndex, rChild);
-        try self.children.insert(splitKeyIndex, lChild);
-        _ = self.children.orderedRemove(splitKeyIndex + 2);
+        try self.keys.insert(index, splitKey);
+        try self.children.insert(index, lChild);
+        try self.children.insert(index + 1, rChild);
+        _ = self.children.orderedRemove(index + 2);
     }
 
     pub fn get(self: Node, key: []const u8) BPlusTreeError![]const u8 {
@@ -133,7 +127,7 @@ pub const Node = struct {
                 if (compKey == 0) {
                     return element.value;
                 }
-                if (compKey < 0) {
+                if (compKey > 0) {
                     continue;
                 }
                 break;
@@ -144,7 +138,7 @@ pub const Node = struct {
                 if (StringUtils.compare(items, key) >= 0) {
                     continue;
                 }
-                return try self.children.items[i - 1].get(key);
+                return try self.children.items[i].get(key);
             }
             if (self.children.items.len == 0) {
                 return BPlusTreeError.KEY_NOT_FOUND;
@@ -153,24 +147,42 @@ pub const Node = struct {
         }
     }
 
+    pub fn visualize(self: Node, parentKey: []const u8) void {
+        if (self.isLeaf) {
+            for (self.elements.items) |value| {
+                std.debug.print("{s} => {s}->{s}\n", .{ parentKey, value.getKey(), value.getValue() });
+            }
+        }
+
+        for (self.keys.items) |value| {
+            std.debug.print("{s} => {s}\n", .{ parentKey, value });
+        }
+
+        for (self.children.items, 0..) |value, i| {
+            const childParent = if (i == 0) parentKey else self.keys.items[i - 1];
+            value.visualize(childParent);
+        }
+        return;
+    }
+
     pub fn insert(self: *Node, key: []const u8, value: []const u8) anyerror!void {
         if (key.len == 0) {
             return BPlusTreeError.EMPTY_KEY_PROVIDED;
         }
 
         if (self.isLeaf) {
-            if (self.elements.items.len == MAX_LEAF_NODE_SIZE) {
+            if (self.getSize() == MAX_LEAF_NODE_SIZE) {
                 return BPlusTreeError.NODE_FULL;
             }
 
-            var indexToInsert: usize = 0;
+            var indexToInsert: usize = self.elements.items.len;
             for (self.elements.items, 0..) |item, i| {
                 const keyComp = item.compareKey(key);
                 if (keyComp == 0) {
                     return BPlusTreeError.KEY_ALREADY_PRESENT;
-                } else if (keyComp < 0) {
+                } else if (keyComp > 0) {
                     continue;
-                } else if (keyComp > 1) {
+                } else if (keyComp < 0) {
                     indexToInsert = i;
                     break;
                 } else {
@@ -179,7 +191,11 @@ pub const Node = struct {
             }
 
             const element = Element{ .key = key, .value = value };
-            try self.elements.insert(indexToInsert, element);
+            if (indexToInsert == self.elements.items.len) {
+                try self.elements.append(element);
+            } else {
+                try self.elements.insert(indexToInsert, element);
+            }
 
             return;
         }
@@ -188,22 +204,23 @@ pub const Node = struct {
             unreachable;
         }
 
-        if (self.children.items.len == 0) {
-            try self.children.append(try Node.init(true));
-        }
+        var childIndexToInsert = self.keys.items.len;
 
-        var childIndexToInsert = self.elements.items.len;
-
-        for (self.elements.items, 0..) |item, i| {
-            if (StringUtils.compare(item.key, key) < 0) {
+        for (self.keys.items, 0..) |item, i| {
+            if (StringUtils.compare(item, key) >= 0) {
                 continue;
             } else {
                 childIndexToInsert = i;
             }
         }
+
+        if (self.children.items.len == childIndexToInsert) {
+            try self.children.append(try Node.init(true));
+        }
+
         self.children.items[childIndexToInsert].insert(key, value) catch |err| switch (err) {
             BPlusTreeError.NODE_FULL => {
-                if (self.elements.items.len == MAX_LEAF_NODE_SIZE) {
+                if (self.getSize() == MAX_LEAF_NODE_SIZE) {
                     return BPlusTreeError.NODE_FULL;
                 } else {
                     try self.split(childIndexToInsert);

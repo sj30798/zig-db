@@ -12,6 +12,8 @@ pub fn parseCommand(userInput: []const u8) !CommandModel.Command {
         commandType = CommandModel.CommandType.GET;
     } else if (StringUtils.equal(splittedInput[0], "PUT")) {
         commandType = CommandModel.CommandType.PUT;
+    } else if (StringUtils.equal(splittedInput[0], "VISUALIZE")) {
+        commandType = CommandModel.CommandType.VISUALIZE;
     } else {
         return CommandModel.Command{
             .commandType = CommandModel.CommandType.NONE,
@@ -47,5 +49,12 @@ test "CommandParser parseCommand NONE" {
     const command = try parseCommand("GETS arg1 arg2");
 
     try testing.expectEqual(command, CommandModel.CommandType.NONE);
+    try testing.expect(command.args.len == 0);
+}
+
+test "CommandParser parseCommand VISUALIZE" {
+    const command = try parseCommand("VISUALIZE");
+
+    try testing.expectEqual(command, CommandModel.CommandType.VISUALIZE);
     try testing.expect(command.args.len == 0);
 }

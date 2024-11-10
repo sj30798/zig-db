@@ -23,6 +23,9 @@ pub fn execute(request: *Server.Request) !void {
     } else if (command.commandType == CommandType.PUT) {
         try CommandExecutor.put(request, command);
         return;
+    } else if (command.commandType == CommandType.VISUALIZE) {
+        try CommandExecutor.visualize(request, command);
+        return;
     }
 
     try request.respond("", .{

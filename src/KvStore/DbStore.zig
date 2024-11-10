@@ -29,4 +29,9 @@ pub const DbStore = struct {
             else => return err,
         };
     }
+
+    pub fn visualize(self: *DbStore) void {
+        self.rootNode.visualize("(*)");
+        return;
+    }
 };

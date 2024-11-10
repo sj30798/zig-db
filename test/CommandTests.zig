@@ -75,4 +75,42 @@ test "Command execution sanity testing" {
     const getC = try executeCommmand(allocator, "GET c");
     defer getC.deinit();
     try testing.expectEqual(getC.status, http.Status.bad_request);
+
+    const viz = try executeCommmand(allocator, "VISUALIZE");
+    defer viz.deinit();
+    try testing.expectEqual(viz.status, http.Status.ok);
+}
+
+test "Command execution splt testing" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    for (0..100) |value| {
+        var buf: [100]u8 = undefined;
+        const command = try std.fmt.bufPrint(&buf, "PUT a{} b", .{value});
+        const insertA = try executeCommmand(allocator, command);
+        defer insertA.deinit();
+        if (std.mem.eql(u8, insertA.reason, "Key already present!")) {
+            try testing.expect(insertA.status == http.Status.bad_request);
+        } else {
+            try testing.expect(insertA.status == http.Status.ok);
+        }
+
+        var buf1: [100]u8 = undefined;
+        const command1 = try std.fmt.bufPrint(&buf1, "GET a{}", .{value});
+        const getA = try executeCommmand(allocator, command1);
+        defer getA.deinit();
+        try testing.expectEqual(getA.status, http.Status.ok);
+
+        try testing.expectEqualStrings(getA.data, "b");
+    }
+
+    const getC = try executeCommmand(allocator, "GET c");
+    defer getC.deinit();
+    try testing.expectEqual(getC.status, http.Status.bad_request);
+
+    const viz = try executeCommmand(allocator, "VISUALIZE");
+    defer viz.deinit();
+    try testing.expectEqual(viz.status, http.Status.ok);
 }

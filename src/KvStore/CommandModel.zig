@@ -2,6 +2,7 @@ pub const CommandType = enum {
     NONE,
     GET,
     PUT,
+    VISUALIZE,
 };
 
 pub const Command = struct {
