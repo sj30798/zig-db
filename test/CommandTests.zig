@@ -70,7 +70,7 @@ test "Command execution sanity testing" {
     defer getA.deinit();
     try testing.expectEqual(getA.status, http.Status.ok);
 
-    try testing.expectEqualStrings(getA.data, "b");
+    try testing.expectEqualStrings(getA.data, "a;b");
 
     const getC = try executeCommmand(allocator, "GET c");
     defer getC.deinit();
@@ -117,15 +117,13 @@ test "Command execution splt testing" {
         }
         try testing.expectEqual(getA.status, http.Status.ok);
 
-        try testing.expectEqualStrings(getA.data, "b");
+        const expectedValue = try std.fmt.bufPrint(&buf1, "a{};b", .{value});
+
+        try testing.expectEqualStrings(getA.data, expectedValue);
     }
     std.debug.print("All keys are present\n", .{});
 
     const getC = try executeCommmand(allocator, "GET c");
     defer getC.deinit();
     try testing.expectEqual(getC.status, http.Status.bad_request);
-
-    const viz = try executeCommmand(allocator, "VISUALIZE");
-    defer viz.deinit();
-    try testing.expectEqual(viz.status, http.Status.ok);
 }

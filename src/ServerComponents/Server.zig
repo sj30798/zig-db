@@ -22,7 +22,7 @@ pub const Server = struct {
             return;
         };
 
-        var server = try addr.listen(.{});
+        var server = try addr.listen(.{ .reuse_port = true });
 
         try stdout.print("Starting server at port: {d}\n", .{server.listen_address.getPort()});
         while (true) {
@@ -40,6 +40,7 @@ pub const Server = struct {
                 continue;
             };
 
+            const startTime = std.time.microTimestamp();
             self.config.routeHandler.handleRequest(&request) catch |err| switch (err) {
                 Routes.PathHandlerError.PathNotFound => {
                     request.respond("", .{ .status = http.Status.not_found }) catch |err1| switch (err1) {
@@ -61,6 +62,8 @@ pub const Server = struct {
                     continue;
                 },
             };
+            const endTime = std.time.microTimestamp();
+            std.debug.print("Request took {} micros\n", .{endTime - startTime});
         }
         return;
     }

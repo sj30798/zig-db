@@ -65,7 +65,7 @@ pub const CommandExecutor = struct {
             return;
         }
 
-        CommandExecutor.store.?.visualize();
+        try CommandExecutor.store.?.visualize();
         try request.respond("", .{});
     }
 
