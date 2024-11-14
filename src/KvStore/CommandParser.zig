@@ -14,6 +14,10 @@ pub fn parseCommand(userInput: []const u8) !CommandModel.Command {
         commandType = CommandModel.CommandType.PUT;
     } else if (StringUtils.equal(splittedInput[0], "VISUALIZE")) {
         commandType = CommandModel.CommandType.VISUALIZE;
+    } else if (StringUtils.equal(splittedInput[0], "TRUNCATE")) {
+        commandType = CommandModel.CommandType.TRUNCATE;
+    } else if (StringUtils.equal(splittedInput[0], "TEST")) {
+        commandType = CommandModel.CommandType.TEST;
     } else {
         return CommandModel.Command{
             .commandType = CommandModel.CommandType.NONE,

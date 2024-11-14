@@ -50,6 +50,7 @@ pub const Server = struct {
                     continue;
                 },
                 else => {
+                    try stderr.print("Failed to respond to request, error: {}", .{err});
                     request.respond("", .{
                         .status = http.Status.internal_server_error,
                     }) catch |err1| switch (err1) {

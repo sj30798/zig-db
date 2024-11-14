@@ -86,25 +86,40 @@ test "Command execution splt testing" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    for (0..100) |value| {
+    const index = 100000;
+
+    for (0..index) |value| {
         var buf: [100]u8 = undefined;
         const command = try std.fmt.bufPrint(&buf, "PUT a{} b", .{value});
+        const startMicroTime = std.time.microTimestamp();
         const insertA = try executeCommmand(allocator, command);
+        const endMicroTime = std.time.microTimestamp();
         defer insertA.deinit();
+
+        std.debug.print("Execute command: \"{s}\" with latency {} microsec, response: {s}\n", .{ command, endMicroTime - startMicroTime, insertA.reason });
+
         if (std.mem.eql(u8, insertA.reason, "Key already present!")) {
             try testing.expect(insertA.status == http.Status.bad_request);
         } else {
             try testing.expect(insertA.status == http.Status.ok);
         }
+    }
 
+    std.debug.print("Verifying all keys again\n", .{});
+    for (0..index) |value| {
         var buf1: [100]u8 = undefined;
         const command1 = try std.fmt.bufPrint(&buf1, "GET a{}", .{value});
         const getA = try executeCommmand(allocator, command1);
         defer getA.deinit();
+
+        if (getA.status != http.Status.ok) {
+            std.debug.print("Missing key for command: {s}\n", .{command1});
+        }
         try testing.expectEqual(getA.status, http.Status.ok);
 
         try testing.expectEqualStrings(getA.data, "b");
     }
+    std.debug.print("All keys are present\n", .{});
 
     const getC = try executeCommmand(allocator, "GET c");
     defer getC.deinit();

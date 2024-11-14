@@ -25,9 +25,12 @@ pub const RouteHandler = struct {
             if (request.head.method == routeEntry.method and StringUtils.equal(request.head.target, routeEntry.path)) {
                 std.debug.print("Handling request for {d} {s}\n", .{ routeEntry.method, request.head.target });
                 routeEntry.handler(request) catch |err| switch (err) {
-                    else => return try request.respond("", .{
-                        .status = http.Status.internal_server_error,
-                    }),
+                    else => {
+                        std.debug.print("Failed to respond to request, error: {}\n", .{err});
+                        return try request.respond("", .{
+                            .status = http.Status.internal_server_error,
+                        });
+                    },
                 };
                 return;
             }

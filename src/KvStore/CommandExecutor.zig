@@ -11,6 +11,7 @@ pub const CommandExecutor = struct {
     pub fn get(request: *Server.Request, command: Command) anyerror!void {
         if (CommandExecutor.store == null) {
             CommandExecutor.store = try DbStore.init();
+            std.debug.print("Initializing DBStore GET command\n", .{});
         }
 
         if (command.args.len != 1) {
@@ -33,6 +34,7 @@ pub const CommandExecutor = struct {
     pub fn put(request: *Server.Request, command: Command) anyerror!void {
         if (CommandExecutor.store == null) {
             CommandExecutor.store = try DbStore.init();
+            std.debug.print("Initializing DBStore PUT command\n", .{});
         }
 
         if (command.args.len != 2) {
@@ -55,6 +57,7 @@ pub const CommandExecutor = struct {
     pub fn visualize(request: *Server.Request, command: Command) anyerror!void {
         if (CommandExecutor.store == null) {
             CommandExecutor.store = try DbStore.init();
+            std.debug.print("Initializing DBStore VISUALIZE command\n", .{});
         }
 
         if (command.args.len != 0) {
@@ -63,6 +66,35 @@ pub const CommandExecutor = struct {
         }
 
         CommandExecutor.store.?.visualize();
+        try request.respond("", .{});
+    }
+
+    pub fn truncate(request: *Server.Request, command: Command) anyerror!void {
+        if (CommandExecutor.store == null) {
+            CommandExecutor.store = try DbStore.init();
+            std.debug.print("Initializing DBStore TRUNCATE command\n", .{});
+        }
+
+        if (command.args.len != 0) {
+            try request.respond("", .{ .status = http.Status.bad_request, .reason = "TRUNCATE expects no arguments!" });
+            return;
+        }
+
+        try CommandExecutor.store.?.truncate();
+        try request.respond("", .{});
+    }
+
+    pub fn testCmd(request: *Server.Request, command: Command) anyerror!void {
+        if (CommandExecutor.store == null) {
+            CommandExecutor.store = try DbStore.init();
+            std.debug.print("Initializing DBStore TEST command\n", .{});
+        }
+
+        if (command.args.len != 0) {
+            try request.respond("", .{ .status = http.Status.bad_request, .reason = "TEST expects no arguments!" });
+            return;
+        }
+        try CommandExecutor.store.?.testCmd();
         try request.respond("", .{});
     }
 };

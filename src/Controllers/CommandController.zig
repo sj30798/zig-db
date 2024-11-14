@@ -26,6 +26,11 @@ pub fn execute(request: *Server.Request) !void {
     } else if (command.commandType == CommandType.VISUALIZE) {
         try CommandExecutor.visualize(request, command);
         return;
+    } else if (command.commandType == CommandType.TRUNCATE) {
+        try CommandExecutor.truncate(request, command);
+        return;
+    } else if (command.commandType == CommandType.TEST) {
+        try CommandExecutor.testCmd(request, command);
     }
 
     try request.respond("", .{

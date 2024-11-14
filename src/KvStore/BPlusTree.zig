@@ -1,24 +1,92 @@
 const std = @import("std");
 const StringUtils = @import("../Utils/StringUtils.zig");
 
-pub const Element = struct {
-    key: []const u8,
-    value: []const u8,
+pub const IndexElement = struct {
+    keyLow: std.ArrayList(u8),
+    keyHigh: std.ArrayList(u8),
+    children: Node,
 
-    pub fn getKey(self: Element) []const u8 {
-        return self.key;
+    pub fn init(keyLow: []const u8, keyHigh: []const u8, children: Node, allocator: std.mem.Allocator) !IndexElement {
+        var keyLowArr = std.ArrayList(u8).init(allocator);
+        try keyLowArr.appendSlice(try allocator.dupe(u8, keyLow));
+        var keyHighArr = std.ArrayList(u8).init(allocator);
+        try keyHighArr.appendSlice(try allocator.dupe(u8, keyHigh));
+
+        return .{
+            .keyLow = keyLowArr,
+            .keyHigh = keyHighArr,
+            .children = children,
+        };
     }
 
-    pub fn getValue(self: Element) []const u8 {
-        return self.value;
+    pub fn initWithFullKeyRange(children: Node, allocator: std.mem.Allocator) !IndexElement {
+        const keyLowArr = std.ArrayList(u8).init(allocator);
+        var keyHighArr = std.ArrayList(u8).init(allocator);
+        try keyHighArr.appendNTimes(255, 100);
+
+        return .{
+            .keyLow = keyLowArr,
+            .keyHigh = keyHighArr,
+            .children = children,
+        };
     }
 
-    pub fn setValue(self: *Element, value: []const u8) void {
-        self.value = value;
+    pub fn setKeyLow(self: *IndexElement, key: []const u8, allocator: std.mem.Allocator) !void {
+        var keyLowArr = std.ArrayList(u8).init(allocator);
+        try keyLowArr.appendSlice(try allocator.dupe(u8, key));
+
+        self.keyLow.deinit();
+
+        self.keyLow = keyLowArr;
     }
 
-    pub fn compareKey(self: Element, other: []const u8) i8 {
-        return StringUtils.compare(self.key, other);
+    pub fn isKeyInRange(self: IndexElement, key: []const u8) bool {
+        if (StringUtils.compare(self.keyLow.items, key) >= 0) {
+            if (StringUtils.compare(key, self.keyHigh.items) > 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    pub fn deinit(self: *IndexElement) void {
+        self.children.deinit();
+        self.keyLow.deinit();
+        self.keyHigh.deinit();
+    }
+};
+
+pub const DataElement = struct {
+    key: std.ArrayList(u8),
+    value: std.ArrayList(u8),
+
+    pub fn init(key: []const u8, value: []const u8, allocator: std.mem.Allocator) !DataElement {
+        var keyArr = std.ArrayList(u8).init(allocator);
+        try keyArr.appendSlice(try allocator.dupe(u8, key));
+        var valueArr = std.ArrayList(u8).init(allocator);
+        try valueArr.appendSlice(try allocator.dupe(u8, value));
+
+        return .{
+            .key = keyArr,
+            .value = valueArr,
+        };
+    }
+
+    pub fn getKey(self: DataElement) []const u8 {
+        return self.key.items;
+    }
+
+    pub fn getValue(self: DataElement) []const u8 {
+        return self.value.items;
+    }
+
+    pub fn deinit(self: DataElement) void {
+        self.key.deinit();
+        self.value.deinit();
+    }
+
+    pub fn compareKey(self: DataElement, other: []const u8) i8 {
+        return StringUtils.compare(self.key.items, other);
     }
 };
 
@@ -31,62 +99,103 @@ pub const BPlusTreeError = error{
 };
 
 pub const Node = struct {
-    keys: std.ArrayList([]const u8),
-    children: std.ArrayList(Node),
     isLeaf: bool,
-    elements: std.ArrayList(Element),
+    indexElements: std.ArrayList(IndexElement),
+    dataElements: std.ArrayList(DataElement),
 
-    const MAX_LEAF_NODE_SIZE = 10;
+    const MAX_INDEX_NODE_SIZE = 20;
+    const MAX_DATA_NODE_SIZE = 1000;
 
-    pub fn init(isLeaf: bool) !Node {
+    pub fn init(isLeaf: bool, allocator: std.mem.Allocator) !Node {
+        var indexElements: std.ArrayList(IndexElement) = undefined;
+        var dataElements: std.ArrayList(DataElement) = undefined;
+        if (isLeaf) {
+            dataElements = try std.ArrayList(DataElement).initCapacity(allocator, MAX_DATA_NODE_SIZE);
+        } else {
+            indexElements = try std.ArrayList(IndexElement).initCapacity(allocator, MAX_INDEX_NODE_SIZE);
+        }
         return .{
             .isLeaf = isLeaf,
-            .keys = try std.ArrayList([]const u8).initCapacity(std.heap.page_allocator, MAX_LEAF_NODE_SIZE),
-            .children = try std.ArrayList(Node).initCapacity(std.heap.page_allocator, MAX_LEAF_NODE_SIZE),
-            .elements = try std.ArrayList(Element).initCapacity(std.heap.page_allocator, MAX_LEAF_NODE_SIZE),
+            .indexElements = indexElements,
+            .dataElements = dataElements,
         };
     }
 
-    fn duplicateElements(self: *Node, other: Node, startIndexInclusive: usize, endIndexExclusive: usize) !void {
+    pub fn init_with_node(child: Node, allocator: std.mem.Allocator) !Node {
+        const dataElements: std.ArrayList(DataElement) = undefined;
+        var indexElements = try std.ArrayList(IndexElement).initCapacity(allocator, MAX_INDEX_NODE_SIZE);
+        try indexElements.append(try IndexElement.initWithFullKeyRange(child, allocator));
+        return .{
+            .isLeaf = false,
+            .indexElements = indexElements,
+            .dataElements = dataElements,
+        };
+    }
+
+    pub fn deinit(self: *Node) void {
+        if (self.isLeaf) {
+            for (0..self.dataElements.items.len) |i| {
+                self.dataElements.items[i].deinit();
+            }
+            self.dataElements.deinit();
+        } else {
+            for (0..self.indexElements.items.len) |i| {
+                self.indexElements.items[i].deinit();
+            }
+            self.indexElements.deinit();
+        }
+    }
+
+    fn moveElements(self: *Node, other: *Node, startIndexInclusive: usize, endIndexExclusive: usize) !void {
         if (self.isLeaf != other.isLeaf) {
             return BPlusTreeError.INVALID_ARGS;
         }
 
         if (self.isLeaf) {
-            for (startIndexInclusive..endIndexExclusive) |index| {
-                self.elements.appendAssumeCapacity(other.elements.items[index]);
+            for (startIndexInclusive..endIndexExclusive) |_| {
+                const elementToMove = other.dataElements.orderedRemove(startIndexInclusive);
+                self.dataElements.appendAssumeCapacity(elementToMove);
             }
         } else {
-            for (startIndexInclusive..endIndexExclusive + 1) |index| {
-                self.children.appendAssumeCapacity(other.children.items[index]);
-            }
-            for (startIndexInclusive..endIndexExclusive) |index| {
-                self.keys.appendAssumeCapacity(other.keys.items[index]);
+            for (startIndexInclusive..endIndexExclusive) |_| {
+                const elementToMove = other.indexElements.orderedRemove(startIndexInclusive);
+                self.indexElements.appendAssumeCapacity(elementToMove);
             }
         }
     }
 
-    pub fn getElementAtIndex(self: Node, index: usize) ![]const u8 {
+    pub fn getKeyAtIndex(self: Node, index: usize) ![]const u8 {
         if (self.getSize() <= index) {
             return BPlusTreeError.INVALID_ARGS;
         }
 
         if (self.isLeaf) {
-            return self.elements.items[index].key;
+            return self.dataElements.items[index].getKey();
         } else {
-            return self.keys.items[index];
+            return self.indexElements.items[index].keyLow.items;
         }
     }
 
     pub fn getSize(self: Node) usize {
         var len: usize = 0;
         if (self.isLeaf) {
-            len = self.elements.items.len;
+            len = self.dataElements.items.len;
         } else {
-            len = self.keys.items.len;
+            len = self.indexElements.items.len;
         }
 
         return len;
+    }
+
+    fn isFull(self: Node) bool {
+        if (self.isLeaf) {
+            if (self.getSize() == MAX_DATA_NODE_SIZE) {
+                return true;
+            }
+        } else if (self.getSize() == MAX_INDEX_NODE_SIZE) {
+            return true;
+        }
+        return false;
     }
 
     pub fn getSplitKeyIndex(self: Node) usize {
@@ -94,38 +203,35 @@ pub const Node = struct {
         return len / 2;
     }
 
-    fn split(self: *Node, index: usize) !void {
+    fn split(self: *Node, index: usize, allocator: std.mem.Allocator) !void {
         if (self.isLeaf) {
             return BPlusTreeError.INVALID_ARGS;
         }
-        if (index > MAX_LEAF_NODE_SIZE) {
+        if (index > MAX_INDEX_NODE_SIZE) {
             return BPlusTreeError.INVALID_ARGS;
         }
-        if (self.keys.items.len == MAX_LEAF_NODE_SIZE) {
+        if (self.isFull()) {
             return BPlusTreeError.NODE_FULL;
         }
 
-        const childToSplit: Node = self.children.items[index];
-        const splitKeyIndex = childToSplit.getSplitKeyIndex();
-        const splitKey = try childToSplit.getElementAtIndex(splitKeyIndex);
-        var lChild = try Node.init(childToSplit.isLeaf);
-        var rChild = try Node.init(childToSplit.isLeaf);
+        var childToSplit: *IndexElement = &self.indexElements.items[index];
+        const splitKeyIndex = childToSplit.children.getSplitKeyIndex();
+        const splitKeyLow = try allocator.dupe(u8, try childToSplit.children.getKeyAtIndex(splitKeyIndex));
 
-        try lChild.duplicateElements(childToSplit, 0, splitKeyIndex);
-        try rChild.duplicateElements(childToSplit, splitKeyIndex, childToSplit.getSize());
+        var lChild = try Node.init(childToSplit.children.isLeaf, allocator);
+        try lChild.moveElements(&childToSplit.children, 0, splitKeyIndex);
+        const lElement = try IndexElement.init(childToSplit.keyLow.items, splitKeyLow, lChild, allocator);
 
-        try self.keys.insert(index, splitKey);
-        try self.children.insert(index, lChild);
-        try self.children.insert(index + 1, rChild);
-        _ = self.children.orderedRemove(index + 2);
+        try self.indexElements.insert(index, lElement);
+        try self.indexElements.items[index + 1].setKeyLow(splitKeyLow, allocator);
     }
 
     pub fn get(self: Node, key: []const u8) BPlusTreeError![]const u8 {
         if (self.isLeaf) {
-            for (self.elements.items) |element| {
+            for (self.dataElements.items) |element| {
                 const compKey = element.compareKey(key);
                 if (compKey == 0) {
-                    return element.value;
+                    return element.getValue();
                 }
                 if (compKey > 0) {
                     continue;
@@ -134,49 +240,45 @@ pub const Node = struct {
             }
             return BPlusTreeError.KEY_NOT_FOUND;
         } else {
-            for (self.keys.items, 0..) |items, i| {
-                if (StringUtils.compare(items, key) >= 0) {
-                    continue;
+            for (self.indexElements.items) |element| {
+                if (element.isKeyInRange(key)) {
+                    return element.children.get(key);
                 }
-                return try self.children.items[i].get(key);
             }
-            if (self.children.items.len == 0) {
-                return BPlusTreeError.KEY_NOT_FOUND;
-            }
-            return try self.children.items[self.children.items.len - 1].get(key);
+            return BPlusTreeError.KEY_NOT_FOUND;
         }
     }
 
-    pub fn visualize(self: Node, parentKey: []const u8) void {
+    pub fn visualize(self: Node, parentKey: []const u8, depth: usize) void {
         if (self.isLeaf) {
-            for (self.elements.items) |value| {
-                std.debug.print("{s} => {s}->{s}\n", .{ parentKey, value.getKey(), value.getValue() });
+            for (self.dataElements.items) |value| {
+                std.debug.print("[{}] {s} => {s}->{s}\n", .{ depth, parentKey, value.getKey(), value.getValue() });
             }
-        }
+        } else {
+            for (self.indexElements.items) |value| {
+                std.debug.print("[{}] {s} => {s}..{s}\n", .{ depth, parentKey, value.keyLow.items, value.keyHigh.items });
+            }
 
-        for (self.keys.items) |value| {
-            std.debug.print("{s} => {s}\n", .{ parentKey, value });
-        }
-
-        for (self.children.items, 0..) |value, i| {
-            const childParent = if (i == 0) parentKey else self.keys.items[i - 1];
-            value.visualize(childParent);
+            for (self.indexElements.items) |value| {
+                const childParent = value.keyLow;
+                value.children.visualize(childParent.items, depth + 1);
+            }
         }
         return;
     }
 
-    pub fn insert(self: *Node, key: []const u8, value: []const u8) anyerror!void {
+    pub fn insert(self: *Node, key: []const u8, value: []const u8, allocator: std.mem.Allocator) anyerror!void {
         if (key.len == 0) {
             return BPlusTreeError.EMPTY_KEY_PROVIDED;
         }
 
         if (self.isLeaf) {
-            if (self.getSize() == MAX_LEAF_NODE_SIZE) {
+            if (self.isFull()) {
                 return BPlusTreeError.NODE_FULL;
             }
 
-            var indexToInsert: usize = self.elements.items.len;
-            for (self.elements.items, 0..) |item, i| {
+            var indexToInsert: usize = self.dataElements.items.len;
+            for (self.dataElements.items, 0..) |item, i| {
                 const keyComp = item.compareKey(key);
                 if (keyComp == 0) {
                     return BPlusTreeError.KEY_ALREADY_PRESENT;
@@ -190,11 +292,11 @@ pub const Node = struct {
                 }
             }
 
-            const element = Element{ .key = key, .value = value };
-            if (indexToInsert == self.elements.items.len) {
-                try self.elements.append(element);
+            const element = try DataElement.init(key, value, allocator);
+            if (indexToInsert == self.dataElements.items.len) {
+                try self.dataElements.append(element);
             } else {
-                try self.elements.insert(indexToInsert, element);
+                try self.dataElements.insert(indexToInsert, element);
             }
 
             return;
@@ -204,27 +306,26 @@ pub const Node = struct {
             unreachable;
         }
 
-        var childIndexToInsert = self.keys.items.len;
+        var childIndexToInsert: usize = 0;
 
-        for (self.keys.items, 0..) |item, i| {
-            if (StringUtils.compare(item, key) >= 0) {
-                continue;
-            } else {
+        for (self.indexElements.items, 0..) |element, i| {
+            if (element.isKeyInRange(key)) {
                 childIndexToInsert = i;
+                break;
             }
         }
 
-        if (self.children.items.len == childIndexToInsert) {
-            try self.children.append(try Node.init(true));
+        if (self.indexElements.items.len == childIndexToInsert) {
+            unreachable;
         }
 
-        self.children.items[childIndexToInsert].insert(key, value) catch |err| switch (err) {
+        self.indexElements.items[childIndexToInsert].children.insert(key, value, allocator) catch |err| switch (err) {
             BPlusTreeError.NODE_FULL => {
-                if (self.getSize() == MAX_LEAF_NODE_SIZE) {
+                if (self.isFull()) {
                     return BPlusTreeError.NODE_FULL;
                 } else {
-                    try self.split(childIndexToInsert);
-                    return try self.insert(key, value);
+                    try self.split(childIndexToInsert, allocator);
+                    return try self.insert(key, value, allocator);
                 }
             },
             else => return err,

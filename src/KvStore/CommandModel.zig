@@ -3,6 +3,8 @@ pub const CommandType = enum {
     GET,
     PUT,
     VISUALIZE,
+    TRUNCATE,
+    TEST,
 };
 
 pub const Command = struct {
